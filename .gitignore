@@ -9,3 +9,4 @@ resources/
 raw_data/*.fastq.gz
 raw_data/*.fq.gz
 drep_*/
+Snakemake_ref/
