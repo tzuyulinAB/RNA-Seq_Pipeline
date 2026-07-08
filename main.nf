@@ -283,7 +283,7 @@ workflow {
     sample_rows = readSamples(params.samples)
     samples_ch = Channel
         .fromList(sample_rows)
-        .map { row -> tuple(row.sample_id, row.condition ?: '', file(row.read1), file(row.read2)) }
+        .map { row -> tuple(row.sample_id, row.condition ?: '', file(row.read1, checkIfExists: true), file(row.read2, checkIfExists: true)) }
 
     if (params.adapter_fasta) {
         adapter_ch = existingPathChannel(params.adapter_fasta)
