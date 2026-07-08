@@ -65,7 +65,10 @@ process VALIDATE_CONFIG {
     script:
     """
     mkdir -p config logs/config
-    python3 "${projectDir}/bin/validate_config.py" --samples ${samplesheet} --base-dir "${workflow.launchDir}" > logs/config/validate_config.log 2>&1
+    python3 "${projectDir}/bin/validate_config.py" --samples ${samplesheet} --base-dir "${workflow.launchDir}" > logs/config/validate_config.log 2>&1 || {
+      cat logs/config/validate_config.log >&2
+      exit 1
+    }
     touch config/validation.ok
     """
 }
@@ -87,7 +90,10 @@ process CHECK_DEPENDENCIES {
     def bbmap_flag = include_bbmap ? '--include-bbmap' : ''
     """
     mkdir -p reports logs/config
-    python3 "${projectDir}/bin/check_dependencies.py" --output reports/dependency_check.tsv ${bbmap_flag} > logs/config/check_dependencies.log 2>&1
+    python3 "${projectDir}/bin/check_dependencies.py" --output reports/dependency_check.tsv ${bbmap_flag} > logs/config/check_dependencies.log 2>&1 || {
+      cat logs/config/check_dependencies.log >&2
+      exit 1
+    }
     """
 }
 
@@ -107,7 +113,10 @@ process PREPARE_TRIMMOMATIC_ADAPTER {
     python3 "${projectDir}/bin/prepare_trimmomatic_adapters.py" \
       --adapter-dir . \
       --selected ${params.adapter_selected} \
-      > trimmomatic_adapters.log 2>&1
+      > trimmomatic_adapters.log 2>&1 || {
+      cat trimmomatic_adapters.log >&2
+      exit 1
+    }
     """
 }
 
@@ -127,7 +136,10 @@ process DOWNLOAD_SORTMERNA_DATABASE {
     python3 "${projectDir}/bin/download_sortmerna_database.py" \
       --outdir . \
       --output smr_v4.3_default_db.fasta \
-      > sortmerna_database.log 2>&1
+      > sortmerna_database.log 2>&1 || {
+      cat sortmerna_database.log >&2
+      exit 1
+    }
     """
 }
 
