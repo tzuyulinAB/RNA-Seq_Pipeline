@@ -1,0 +1,2 @@
+sample_id	condition	read1	read2
+CAAI_1	AD	raw_data/CAAI_1_RNA_TGGATCGA-GTGCGATA_L002_R1_001.fastq.gz	raw_data/CAAI_1_RNA_TGGATCGA-GTGCGATA_L002_R2_001.fastq.gz

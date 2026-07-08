@@ -1,0 +1,212 @@
+import csv
+
+
+configfile: "config/config.yaml"
+
+
+def read_tsv(path):
+    rows = []
+    with open(path, newline="") as handle:
+        for row in csv.DictReader((line for line in handle if not line.lstrip().startswith("#")), delimiter="\t"):
+            if row and any((value or "").strip() for value in row.values()):
+                rows.append({key: (value or "").strip() for key, value in row.items()})
+    return rows
+
+
+SAMPLES = {row["sample_id"]: row for row in read_tsv(config["samples"])}
+RNA_SAMPLES = sorted(SAMPLES)
+OUTDIR = config.get("outdir", "results")
+
+
+def cfg(*keys, default=None):
+    value = config
+    for key in keys:
+        value = value.get(key, {})
+    return value if value != {} else default
+
+
+ADAPTER_DIR = cfg("adapters", "dir", default="adapter_seq")
+ADAPTER_FASTA = f"{ADAPTER_DIR}/{cfg('adapters', 'selected', default='NexteraPE-PE.fa')}"
+SORTMERNA_REF = cfg("databases", "sortmerna_ref", default="resources/sortmerna/smr_v4.3_default_db.fasta")
+DREP_GENOMES_DIR = cfg("databases", "drep_genomes_dir", default="")
+
+
+def tmpdir():
+    configured = cfg("resources", "tmpdir", default="")
+    return configured if configured else f"{OUTDIR}/tmp"
+
+
+rule all:
+    input:
+        "config/validation.ok",
+        "reports/dependency_check.tsv",
+        expand(f"{OUTDIR}/rna/fastqc_trimmed/{{sample}}_F_paired_fastqc.html", sample=RNA_SAMPLES),
+        expand(f"{OUTDIR}/rna/fastqc_trimmed/{{sample}}_R_paired_fastqc.html", sample=RNA_SAMPLES),
+        expand(f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_fwd.fq.gz", sample=RNA_SAMPLES),
+        expand(f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_rev.fq.gz", sample=RNA_SAMPLES),
+        expand(f"{OUTDIR}/expression/bbmap/{{sample}}/.done", sample=RNA_SAMPLES) if DREP_GENOMES_DIR else [],
+
+
+rule validate_config:
+    input:
+        samples=config["samples"],
+    output:
+        touch("config/validation.ok")
+    log:
+        "logs/config/validate_config.log"
+    conda:
+        "envs/python.yaml"
+    shell:
+        "python scripts/validate_config.py --samples {input.samples} > {log} 2>&1"
+
+
+rule check_dependencies:
+    output:
+        "reports/dependency_check.tsv"
+    log:
+        "logs/config/check_dependencies.log"
+    conda:
+        "envs/python.yaml"
+    shell:
+        "python scripts/check_dependencies.py --output {output} > {log} 2>&1"
+
+
+rule prepare_trimmomatic_adapter:
+    output:
+        ADAPTER_FASTA
+    log:
+        "logs/resources/trimmomatic_adapters.log"
+    conda:
+        "envs/download.yaml"
+    params:
+        adapter_dir=ADAPTER_DIR,
+        selected=lambda wc: cfg("adapters", "selected", default="NexteraPE-PE.fa"),
+    shell:
+        "python scripts/prepare_trimmomatic_adapters.py --adapter-dir {params.adapter_dir} --selected {params.selected} > {log} 2>&1"
+
+
+rule download_sortmerna_database:
+    output:
+        SORTMERNA_REF
+    log:
+        "logs/resources/sortmerna_database.log"
+    conda:
+        "envs/download.yaml"
+    params:
+        outdir=lambda wc: cfg("databases", "sortmerna_dir", default="resources/sortmerna"),
+    shell:
+        "python scripts/download_sortmerna_database.py --outdir {params.outdir} --output {output} > {log} 2>&1"
+
+
+rule trim_rna:
+    input:
+        read1=lambda wc: SAMPLES[wc.sample]["read1"],
+        read2=lambda wc: SAMPLES[wc.sample]["read2"],
+        adapter=ADAPTER_FASTA,
+    output:
+        fwd_paired=f"{OUTDIR}/rna/trim/{{sample}}_F_paired.fq.gz",
+        fwd_unpaired=f"{OUTDIR}/rna/trim/{{sample}}_F_unpaired.fq.gz",
+        rev_paired=f"{OUTDIR}/rna/trim/{{sample}}_R_paired.fq.gz",
+        rev_unpaired=f"{OUTDIR}/rna/trim/{{sample}}_R_unpaired.fq.gz",
+    log:
+        "logs/trimmomatic/rna/{sample}.log"
+    threads:
+        cfg("threads", "trimmomatic", default=16)
+    conda:
+        "envs/trimmomatic.yaml"
+    params:
+        java_opts=lambda wc: cfg("params", "trimmomatic_java_opts", default="-Xmx16g"),
+        clip=lambda wc: cfg("params", "trimmomatic_illuminaclip", default="2:30:10"),
+        trim=lambda wc: cfg("params", "trimmomatic", default="LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36"),
+    shell:
+        """
+        JAVA_TOOL_OPTIONS="{params.java_opts}" trimmomatic PE -threads {threads} \
+          {input.read1} {input.read2} \
+          {output.fwd_paired} {output.fwd_unpaired} \
+          {output.rev_paired} {output.rev_unpaired} \
+          ILLUMINACLIP:{input.adapter}:{params.clip} {params.trim} \
+          > {log} 2>&1
+        """
+
+
+rule fastqc_rna_trimmed:
+    input:
+        fwd=f"{OUTDIR}/rna/trim/{{sample}}_F_paired.fq.gz",
+        rev=f"{OUTDIR}/rna/trim/{{sample}}_R_paired.fq.gz",
+    output:
+        fwd_html=f"{OUTDIR}/rna/fastqc_trimmed/{{sample}}_F_paired_fastqc.html",
+        rev_html=f"{OUTDIR}/rna/fastqc_trimmed/{{sample}}_R_paired_fastqc.html",
+    log:
+        "logs/fastqc/rna_trimmed/{sample}.log"
+    threads:
+        cfg("threads", "fastqc", default=4)
+    conda:
+        "envs/qc.yaml"
+    params:
+        outdir=f"{OUTDIR}/rna/fastqc_trimmed"
+    shell:
+        "fastqc --threads {threads} --outdir {params.outdir} {input.fwd} {input.rev} > {log} 2>&1"
+
+
+rule sortmerna:
+    input:
+        fwd=f"{OUTDIR}/rna/trim/{{sample}}_F_paired.fq.gz",
+        rev=f"{OUTDIR}/rna/trim/{{sample}}_R_paired.fq.gz",
+        ref=SORTMERNA_REF,
+    output:
+        fwd=f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_fwd.fq.gz",
+        rev=f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_rev.fq.gz",
+    log:
+        "logs/sortmerna/{sample}.log"
+    threads:
+        cfg("threads", "sortmerna", default=16)
+    conda:
+        "envs/sortmerna.yaml"
+    params:
+        workdir=lambda wc: f"{OUTDIR}/rna/sortmerna/work/{wc.sample}",
+        prefix=lambda wc: f"{OUTDIR}/rna/sortmerna/{wc.sample}_rRNArm",
+    shell:
+        """
+        sortmerna \
+          --workdir {params.workdir} \
+          --ref {input.ref} \
+          --reads {input.fwd} \
+          --reads {input.rev} \
+          --aligned {OUTDIR}/rna/sortmerna/{wildcards.sample} \
+          --other {params.prefix} \
+          --fastx \
+          --threads {threads} \
+          --out2 \
+          --sout \
+          > {log} 2>&1
+        """
+
+
+rule bbmap_expression:
+    input:
+        fwd=f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_fwd.fq.gz",
+        rev=f"{OUTDIR}/rna/sortmerna/{{sample}}_rRNArm_rev.fq.gz",
+    output:
+        touch(f"{OUTDIR}/expression/bbmap/{{sample}}/.done")
+    log:
+        "logs/bbmap/{sample}.log"
+    threads:
+        cfg("threads", "bbmap", default=12)
+    conda:
+        "envs/bbmap.yaml"
+    params:
+        genomes=lambda wc: cfg("databases", "drep_genomes_dir", default=""),
+        outdir=lambda wc: f"{OUTDIR}/expression/bbmap/{wc.sample}",
+    shell:
+        """
+        test -n "{params.genomes}"
+        mkdir -p {params.outdir}
+        for genome in {params.genomes}/*.fa; do
+          name=$(basename "$genome" .fa)
+          mkdir -p {params.outdir}/"$name"
+          bbmap.sh threads={threads} nodisk=t ref="$genome" \
+            in={input.fwd} in2={input.rev} \
+            scafstats={params.outdir}/"$name"/scafstats.tsv \
+            covstats={params.outdir}/"$name"/covstats.tsv
+        done > {log} 2>&1
+        """

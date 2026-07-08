@@ -1,0 +1,11 @@
+.DS_Store
+.nextflow*
+work/
+results/
+logs/
+reports/
+adapter_seq/
+resources/
+raw_data/*.fastq.gz
+raw_data/*.fq.gz
+drep_*/
