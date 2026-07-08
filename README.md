@@ -1,7 +1,5 @@
 # Metatranscriptomics Nextflow Pipeline
 
-This DSL2 Nextflow workflow follows the reference workflow in `Snakemake_ref/Snakefile`.
-
 ## Workflow
 
 1. Validate the sample sheet.
