@@ -15,6 +15,11 @@ DATABASE_URLS = (
     "https://github.com/sortmerna/sortmerna/releases/download/v4.3.4/database.tar.gz",
 )
 
+DIRECT_FASTA_URLS = (
+    "https://github.com/sortmerna/sortmerna/releases/download/v4.3.6/{name}",
+    "https://github.com/sortmerna/sortmerna/releases/download/v4.3.4/{name}",
+)
+
 
 def find_local_fastas():
     patterns = [
@@ -54,6 +59,61 @@ def extract_fastas(archive_path, output):
         return len(fastas)
 
 
+def find_named_fasta(root_dir, output_name):
+    matches = []
+    for root, _, files in os.walk(root_dir):
+        for filename in files:
+            if filename == output_name:
+                matches.append(os.path.join(root, filename))
+    return sorted(matches)
+
+
+def extract_requested_database(archive_path, output, output_name):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with tarfile.open(archive_path, "r:gz") as archive:
+            archive.extractall(tmpdir)
+
+        exact_matches = find_named_fasta(tmpdir, output_name)
+        if exact_matches:
+            shutil.copyfile(exact_matches[0], output)
+            return f"copied {output_name}"
+
+        fastas = []
+        for root, _, files in os.walk(tmpdir):
+            for filename in files:
+                if filename.endswith((".fa", ".fasta", ".fna")):
+                    fastas.append(os.path.join(root, filename))
+        if not fastas:
+            raise RuntimeError("Downloaded SortMeRNA archive did not contain FASTA files")
+
+        concatenate_fastas(sorted(fastas), output)
+        return f"concatenated {len(fastas)} FASTA file(s)"
+
+
+def download_direct_fasta(output_name, output):
+    errors = []
+    for template in DIRECT_FASTA_URLS:
+        url = template.format(name=output_name)
+        print(f"Trying direct SortMeRNA FASTA download from {url}")
+        try:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                urllib.request.urlretrieve(url, tmp_path)
+                if os.path.getsize(tmp_path) < 100:
+                    with open(tmp_path, "rb") as handle:
+                        snippet = handle.read(100).decode("utf-8", errors="replace")
+                    raise RuntimeError(f"downloaded file is unexpectedly small: {snippet!r}")
+                shutil.move(tmp_path, output)
+                return url
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+    raise RuntimeError("Direct FASTA download failed. Attempts: " + " | ".join(errors))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Prepare a concatenated SortMeRNA reference FASTA.")
     parser.add_argument("--outdir", required=True, help="Directory for database output")
@@ -67,11 +127,16 @@ def main():
         print(f"SortMeRNA reference already exists: {output}")
         return
 
-    local_fastas = find_local_fastas()
-    if local_fastas:
-        concatenate_fastas(local_fastas, output)
-        print(f"Concatenated {len(local_fastas)} local SortMeRNA FASTA file(s) into {output}")
-        return
+    output_name = os.path.basename(output)
+    direct_errors = None
+    if output_name.startswith("smr_"):
+        try:
+            url = download_direct_fasta(output_name, output)
+            print(f"Downloaded {output_name} from {url}")
+            return
+        except Exception as exc:
+            direct_errors = str(exc)
+            print(f"Direct FASTA download unavailable for {output_name}: {exc}")
 
     errors = []
     for url in DATABASE_URLS:
@@ -79,11 +144,20 @@ def main():
             print(f"Downloading SortMeRNA database from {url}")
             try:
                 urllib.request.urlretrieve(url, tmp.name)
-                count = extract_fastas(tmp.name, output)
-                print(f"Extracted and concatenated {count} FASTA file(s) into {output}")
+                message = extract_requested_database(tmp.name, output, output_name)
+                print(f"Extracted SortMeRNA archive and {message} into {output}")
                 return
             except Exception as exc:
                 errors.append(f"{url}: {exc}")
+
+    local_fastas = find_local_fastas()
+    if local_fastas:
+        concatenate_fastas(local_fastas, output)
+        print(f"Concatenated {len(local_fastas)} local SortMeRNA FASTA file(s) into {output}")
+        return
+
+    if direct_errors:
+        errors.insert(0, direct_errors)
 
     raise RuntimeError(
         "Could not prepare SortMeRNA database from local files or release downloads. "

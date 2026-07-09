@@ -52,6 +52,13 @@ nextflow run main.nf -profile docker \
   --sortmerna_ref /path/to/smr_v4.3_default_db.fasta
 ```
 
+Use the smaller SortMeRNA fast database for a test run:
+
+```bash
+nextflow run main.nf -profile docker \
+  --sortmerna_ref resources/sortmerna/smr_v4.3_fast_db.fasta
+```
+
 Reuse an existing SortMeRNA index directory:
 
 ```bash
