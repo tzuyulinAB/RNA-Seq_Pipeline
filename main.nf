@@ -143,6 +143,57 @@ process DOWNLOAD_SORTMERNA_DATABASE {
     """
 }
 
+process PREPARE_SORTMERNA_INDEX {
+    tag 'sortmerna_index'
+    label 'sortmerna'
+    cpus { params.threads.sortmerna as int }
+
+    publishDir "${params.sortmerna_dir}/index", mode: 'copy', overwrite: true, pattern: 'sortmerna_index/**'
+    publishDir 'logs/resources', mode: 'copy', overwrite: true, pattern: 'sortmerna_index.log'
+
+    input:
+    path ref
+
+    output:
+    path 'sortmerna_index', emit: index
+    path 'sortmerna_index.log', emit: log
+
+    script:
+    """
+    cat > index_probe_R1.fq <<'EOF'
+@index_probe/1
+ACGTACGTACGTACGTACGTACGTACGTACGT
++
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+EOF
+
+    cat > index_probe_R2.fq <<'EOF'
+@index_probe/2
+TGCATGCATGCATGCATGCATGCATGCATGCA
++
+IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+EOF
+
+    sortmerna \
+      --workdir sortmerna_index \
+      --ref ${ref} \
+      --reads index_probe_R1.fq \
+      --reads index_probe_R2.fq \
+      --aligned index_probe_aligned \
+      --other index_probe_other \
+      --fastx \
+      --threads ${task.cpus} \
+      --out2 \
+      --sout \
+      > sortmerna_index.log 2>&1 || {
+      cat sortmerna_index.log >&2
+      exit 1
+    }
+
+    test -d sortmerna_index/idx
+    """
+}
+
 process TRIM_RNA {
     tag sample_id
     label 'trimmomatic'
@@ -207,7 +258,7 @@ process SORTMERNA {
     publishDir 'logs/sortmerna', mode: 'copy', overwrite: true, pattern: '*.log'
 
     input:
-    tuple val(sample_id), val(condition), path(fwd), path(rev), path(fwd_unpaired), path(rev_unpaired), path(ref)
+    tuple val(sample_id), val(condition), path(fwd), path(rev), path(fwd_unpaired), path(rev_unpaired), path(ref), path(index_dir)
 
     output:
     tuple val(sample_id), val(condition),
@@ -218,8 +269,10 @@ process SORTMERNA {
 
     script:
     """
+    cp -a ${index_dir} sortmerna_work_${sample_id}
+
     sortmerna \
-      --workdir work_${sample_id} \
+      --workdir sortmerna_work_${sample_id} \
       --ref ${ref} \
       --reads ${fwd} \
       --reads ${rev} \
@@ -299,12 +352,19 @@ workflow {
         sortmerna_ref_ch = DOWNLOAD_SORTMERNA_DATABASE.out.ref
     }
 
+    if (params.sortmerna_index_dir) {
+        sortmerna_index_ch = existingPathChannel(params.sortmerna_index_dir)
+    } else {
+        PREPARE_SORTMERNA_INDEX(sortmerna_ref_ch)
+        sortmerna_index_ch = PREPARE_SORTMERNA_INDEX.out.index
+    }
+
     trim_input_ch = samples_ch.combine(adapter_ch)
     TRIM_RNA(trim_input_ch)
 
     FASTQC_RNA_TRIMMED(TRIM_RNA.out.trimmed)
 
-    sortmerna_input_ch = TRIM_RNA.out.trimmed.combine(sortmerna_ref_ch)
+    sortmerna_input_ch = TRIM_RNA.out.trimmed.combine(sortmerna_ref_ch).combine(sortmerna_index_ch)
     SORTMERNA(sortmerna_input_ch)
 
     if (params.drep_genomes_dir) {

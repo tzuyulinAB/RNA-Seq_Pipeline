@@ -6,10 +6,11 @@
 2. Report command availability.
 3. Prepare the selected Trimmomatic adapter FASTA.
 4. Prepare a SortMeRNA rRNA reference FASTA.
-5. Trim paired-end RNA reads with Trimmomatic.
-6. Run FastQC on paired trimmed reads.
-7. Remove rRNA reads with SortMeRNA.
-8. Optionally map rRNA-removed reads to dereplicated MAGs with BBMap.
+5. Build or reuse a SortMeRNA index.
+6. Trim paired-end RNA reads with Trimmomatic.
+7. Run FastQC on paired trimmed reads.
+8. Remove rRNA reads with SortMeRNA.
+9. Optionally map rRNA-removed reads to dereplicated MAGs with BBMap.
 
 ## Inputs
 
@@ -51,6 +52,14 @@ nextflow run main.nf -profile docker \
   --sortmerna_ref /path/to/smr_v4.3_default_db.fasta
 ```
 
+Reuse an existing SortMeRNA index directory:
+
+```bash
+nextflow run main.nf -profile docker \
+  --sortmerna_ref /path/to/smr_v4.3_default_db.fasta \
+  --sortmerna_index_dir /path/to/sortmerna_index
+```
+
 ## Key Parameters
 
 | Parameter | Default | Description |
@@ -60,6 +69,7 @@ nextflow run main.nf -profile docker \
 | `--adapter_selected` | `NexteraPE-PE.fa` | Trimmomatic adapter file to prepare. |
 | `--adapter_fasta` | `null` | Existing adapter FASTA to use directly. |
 | `--sortmerna_ref` | `resources/sortmerna/smr_v4.3_default_db.fasta` | Existing or target SortMeRNA reference FASTA. |
+| `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow builds one once. |
 | `--drep_genomes_dir` | empty | Optional directory containing dereplicated MAG `.fa` files for BBMap. |
 
 ## Outputs
@@ -68,6 +78,7 @@ nextflow run main.nf -profile docker \
 | --- | --- |
 | Validation | `config/validation.ok`, `logs/config/validate_config.log` |
 | Dependency check | `reports/dependency_check.tsv`, `logs/config/check_dependencies.log` |
+| SortMeRNA index | `resources/sortmerna/index/sortmerna_index`, `logs/resources/sortmerna_index.log` |
 | Trimming | `results/rna/trim/*_paired.fq.gz`, `results/rna/trim/*_unpaired.fq.gz` |
 | FastQC | `results/rna/fastqc_trimmed/*_fastqc.html` |
 | rRNA removal | `results/rna/sortmerna/*_rRNArm_fwd.fq.gz`, `results/rna/sortmerna/*_rRNArm_rev.fq.gz` |
