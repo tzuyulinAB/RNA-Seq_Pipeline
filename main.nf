@@ -370,11 +370,7 @@ workflow {
 
     if (params.drep_genomes_dir) {
         genomes_ch = Channel
-            .fromPath([
-                "${params.drep_genomes_dir}/*.fa",
-                "${params.drep_genomes_dir}/*.fna",
-                "${params.drep_genomes_dir}/*.fasta",
-            ], checkIfExists: true)
+            .fromPath("${params.drep_genomes_dir}/*.{fa,fna,fasta}", checkIfExists: true)
             .collect()
 
         bbmap_input_ch = SORTMERNA.out.rrna_removed.combine(genomes_ch)
