@@ -284,7 +284,10 @@ process SORTMERNA {
       --threads ${task.cpus} \
       --out2 \
       --sout \
-      > ${sample_id}.log 2>&1
+      > ${sample_id}.log 2>&1 || {
+      cat ${sample_id}.log >&2
+      exit 1
+    }
 
     for suffix in fwd rev; do
       if [ -s "${sample_id}_rRNArm_\${suffix}.fq" ] && [ ! -s "${sample_id}_rRNArm_\${suffix}.fq.gz" ]; then
@@ -292,8 +295,18 @@ process SORTMERNA {
       fi
     done
 
-    test -s ${sample_id}_rRNArm_fwd.fq.gz
-    test -s ${sample_id}_rRNArm_rev.fq.gz
+    test -s ${sample_id}_rRNArm_fwd.fq.gz || {
+      echo "Missing expected SortMeRNA output: ${sample_id}_rRNArm_fwd.fq.gz" >&2
+      ls -lh >&2
+      cat ${sample_id}.log >&2
+      exit 1
+    }
+    test -s ${sample_id}_rRNArm_rev.fq.gz || {
+      echo "Missing expected SortMeRNA output: ${sample_id}_rRNArm_rev.fq.gz" >&2
+      ls -lh >&2
+      cat ${sample_id}.log >&2
+      exit 1
+    }
     """
 }
 
