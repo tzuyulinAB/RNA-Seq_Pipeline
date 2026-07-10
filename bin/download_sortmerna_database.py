@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import gzip
 import glob
 import os
 import shutil
@@ -21,14 +22,23 @@ DIRECT_FASTA_URLS = (
 )
 
 
+FASTA_EXTENSIONS = (".fa", ".fasta", ".fna", ".fa.gz", ".fasta.gz", ".fna.gz")
+
+
 def find_local_fastas():
     patterns = [
         "/opt/conda/share/sortmerna*/**/*.fasta",
+        "/opt/conda/share/sortmerna*/**/*.fasta.gz",
         "/opt/conda/share/sortmerna*/**/*.fa",
+        "/opt/conda/share/sortmerna*/**/*.fa.gz",
         "/usr/local/share/sortmerna*/**/*.fasta",
+        "/usr/local/share/sortmerna*/**/*.fasta.gz",
         "/usr/local/share/sortmerna*/**/*.fa",
+        "/usr/local/share/sortmerna*/**/*.fa.gz",
         "/usr/share/sortmerna*/**/*.fasta",
+        "/usr/share/sortmerna*/**/*.fasta.gz",
         "/usr/share/sortmerna*/**/*.fa",
+        "/usr/share/sortmerna*/**/*.fa.gz",
     ]
     paths = []
     for pattern in patterns:
@@ -39,7 +49,8 @@ def find_local_fastas():
 def concatenate_fastas(paths, output):
     with open(output, "wb") as out_handle:
         for path in paths:
-            with open(path, "rb") as in_handle:
+            opener = gzip.open if path.endswith(".gz") else open
+            with opener(path, "rb") as in_handle:
                 shutil.copyfileobj(in_handle, out_handle)
                 out_handle.write(b"\n")
 
@@ -51,7 +62,7 @@ def extract_fastas(archive_path, output):
         fastas = []
         for root, _, files in os.walk(tmpdir):
             for filename in files:
-                if filename.endswith((".fa", ".fasta", ".fna")):
+                if filename.endswith(FASTA_EXTENSIONS):
                     fastas.append(os.path.join(root, filename))
         if not fastas:
             raise RuntimeError("Downloaded SortMeRNA archive did not contain FASTA files")
@@ -63,7 +74,24 @@ def find_named_fasta(root_dir, output_name):
     matches = []
     for root, _, files in os.walk(root_dir):
         for filename in files:
-            if filename == output_name:
+            if filename in (output_name, f"{output_name}.gz"):
+                matches.append(os.path.join(root, filename))
+    return sorted(matches)
+
+
+def copy_fasta(path, output):
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rb") as in_handle, open(output, "wb") as out_handle:
+        shutil.copyfileobj(in_handle, out_handle)
+
+
+def find_keyword_fastas(root_dir, keyword):
+    matches = []
+    keyword = keyword.lower()
+    for root, _, files in os.walk(root_dir):
+        for filename in files:
+            lower_name = filename.lower()
+            if keyword in lower_name and lower_name.endswith(FASTA_EXTENSIONS):
                 matches.append(os.path.join(root, filename))
     return sorted(matches)
 
@@ -75,13 +103,19 @@ def extract_requested_database(archive_path, output, output_name):
 
         exact_matches = find_named_fasta(tmpdir, output_name)
         if exact_matches:
-            shutil.copyfile(exact_matches[0], output)
+            copy_fasta(exact_matches[0], output)
             return f"copied {output_name}"
+
+        if "fast" in output_name.lower():
+            fast_matches = find_keyword_fastas(tmpdir, "fast")
+            if fast_matches:
+                concatenate_fastas(fast_matches, output)
+                return f"extracted {len(fast_matches)} fast FASTA file(s)"
 
         fastas = []
         for root, _, files in os.walk(tmpdir):
             for filename in files:
-                if filename.endswith((".fa", ".fasta", ".fna")):
+                if filename.endswith(FASTA_EXTENSIONS):
                     fastas.append(os.path.join(root, filename))
         if not fastas:
             raise RuntimeError("Downloaded SortMeRNA archive did not contain FASTA files")

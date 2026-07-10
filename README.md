@@ -59,6 +59,8 @@ nextflow run main.nf -profile docker \
   --sortmerna_ref resources/sortmerna/smr_v4.3_fast_db.fasta
 ```
 
+If a previous run created an unexpectedly large `smr_v4.3_fast_db.fasta`, remove it before rerunning so the workflow can extract the fast database again.
+
 Reuse an existing SortMeRNA index directory:
 
 ```bash
