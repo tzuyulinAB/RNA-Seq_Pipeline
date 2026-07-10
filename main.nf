@@ -316,7 +316,8 @@ process BBMAP_EXPRESSION {
     mkdir -p ${sample_id}
 
     for genome in ${genomes}; do
-      name=\$(basename "\${genome}" .fa)
+      name=\$(basename "\${genome}")
+      name="\${name%.*}"
       mkdir -p ${sample_id}/"\${name}"
       bbmap.sh threads=${task.cpus} nodisk=t ref="\${genome}" \
         in=${fwd} in2=${rev} \
@@ -369,7 +370,11 @@ workflow {
 
     if (params.drep_genomes_dir) {
         genomes_ch = Channel
-            .fromPath("${params.drep_genomes_dir}/*.fa", checkIfExists: true)
+            .fromPath([
+                "${params.drep_genomes_dir}/*.fa",
+                "${params.drep_genomes_dir}/*.fna",
+                "${params.drep_genomes_dir}/*.fasta",
+            ], checkIfExists: true)
             .collect()
 
         bbmap_input_ch = SORTMERNA.out.rrna_removed.combine(genomes_ch)
