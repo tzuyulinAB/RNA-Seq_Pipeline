@@ -193,6 +193,8 @@ EOF
     }
 
     test -d sortmerna_index/idx
+    rm -rf sortmerna_index/kvdb sortmerna_index/readb
+    mkdir -p sortmerna_index/kvdb sortmerna_index/readb
     """
 }
 
@@ -271,7 +273,9 @@ process SORTMERNA {
 
     script:
     """
-    cp -a ${index_dir} sortmerna_work_${sample_id}
+    mkdir -p sortmerna_work_${sample_id}
+    cp -aL ${index_dir}/idx sortmerna_work_${sample_id}/idx
+    mkdir -p sortmerna_work_${sample_id}/kvdb sortmerna_work_${sample_id}/readb
 
     sortmerna \
       --workdir sortmerna_work_${sample_id} \
