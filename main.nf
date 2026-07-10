@@ -185,6 +185,7 @@ EOF
       --other index_probe_other \
       --fastx \
       --threads ${task.cpus} \
+      --paired_in \
       --out2 \
       --sout \
       > sortmerna_index.log 2>&1 || {
@@ -286,6 +287,7 @@ process SORTMERNA {
       --other ${sample_id}_rRNArm \
       --fastx \
       --threads ${task.cpus} \
+      --paired_in \
       --out2 \
       --sout \
       > ${sample_id}.log 2>&1 || {
