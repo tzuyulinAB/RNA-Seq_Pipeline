@@ -374,6 +374,8 @@ workflow {
 
     if (params.sortmerna_index_dir) {
         sortmerna_index_ch = existingPathChannel(params.sortmerna_index_dir)
+    } else if (file("${params.sortmerna_dir}/index/sortmerna_index/idx").exists()) {
+        sortmerna_index_ch = existingPathChannel("${params.sortmerna_dir}/index/sortmerna_index")
     } else {
         PREPARE_SORTMERNA_INDEX(sortmerna_ref_ch)
         sortmerna_index_ch = PREPARE_SORTMERNA_INDEX.out.index

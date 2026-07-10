@@ -78,7 +78,7 @@ nextflow run main.nf -profile docker \
 | `--adapter_selected` | `NexteraPE-PE.fa` | Trimmomatic adapter file to prepare. |
 | `--adapter_fasta` | `null` | Existing adapter FASTA to use directly. |
 | `--sortmerna_ref` | `resources/sortmerna/smr_v4.3_default_db.fasta` | Existing or target SortMeRNA reference FASTA. |
-| `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow builds one once. |
+| `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow reuses `resources/sortmerna/index/sortmerna_index` when present, otherwise builds one once. |
 | `--drep_genomes_dir` | empty | Optional directory containing dereplicated MAG `.fa`, `.fna`, or `.fasta` files for BBMap. |
 
 ## Outputs
