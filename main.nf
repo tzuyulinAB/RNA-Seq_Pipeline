@@ -129,6 +129,7 @@ process DOWNLOAD_SORTMERNA_DATABASE {
 
     output:
     path 'selected_sortmerna_ref.fasta', emit: ref
+    path 'smr_v4.3_*.fasta', emit: databases
     path 'sortmerna_database.log', emit: log
 
     script:
