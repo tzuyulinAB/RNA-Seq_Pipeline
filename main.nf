@@ -124,18 +124,19 @@ process DOWNLOAD_SORTMERNA_DATABASE {
     tag 'sortmerna_db'
     label 'download'
 
-    publishDir params.sortmerna_dir, mode: 'copy', overwrite: true, pattern: 'sortmerna_ref.fasta', saveAs: { params.sortmerna_ref.toString().tokenize('/').last() }
+    publishDir params.sortmerna_dir, mode: 'copy', overwrite: true, pattern: 'smr_v4.3_*.fasta'
     publishDir 'logs/resources', mode: 'copy', overwrite: true, pattern: 'sortmerna_database.log'
 
     output:
-    path 'sortmerna_ref.fasta', emit: ref
+    path 'selected_sortmerna_ref.fasta', emit: ref
     path 'sortmerna_database.log', emit: log
 
     script:
     """
     python3 "${projectDir}/bin/download_sortmerna_database.py" \
       --outdir . \
-      --output sortmerna_ref.fasta \
+      --output selected_sortmerna_ref.fasta \
+      --selected ${params.sortmerna_ref.toString().tokenize('/').last()} \
       > sortmerna_database.log 2>&1 || {
       cat sortmerna_database.log >&2
       exit 1

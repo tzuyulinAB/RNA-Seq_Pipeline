@@ -61,6 +61,8 @@ nextflow run main.nf -profile docker \
 
 If a previous run created an unexpectedly large `smr_v4.3_fast_db.fasta`, remove it before rerunning so the workflow can extract the fast database again.
 
+When the SortMeRNA database archive is downloaded, all included database FASTA files are extracted into `resources/sortmerna/`. The pipeline uses the file selected by `--sortmerna_ref`; if not assigned, it uses `resources/sortmerna/smr_v4.3_default_db.fasta`.
+
 Reuse an existing SortMeRNA index directory:
 
 ```bash

@@ -2,7 +2,6 @@
 
 import argparse
 import gzip
-import glob
 import os
 import shutil
 import sys
@@ -16,67 +15,7 @@ DATABASE_URLS = (
     "https://github.com/sortmerna/sortmerna/releases/download/v4.3.4/database.tar.gz",
 )
 
-DIRECT_FASTA_URLS = (
-    "https://github.com/sortmerna/sortmerna/releases/download/v4.3.6/{name}",
-    "https://github.com/sortmerna/sortmerna/releases/download/v4.3.4/{name}",
-)
-
-
 FASTA_EXTENSIONS = (".fa", ".fasta", ".fna", ".fa.gz", ".fasta.gz", ".fna.gz")
-
-
-def find_local_fastas():
-    patterns = [
-        "/opt/conda/share/sortmerna*/**/*.fasta",
-        "/opt/conda/share/sortmerna*/**/*.fasta.gz",
-        "/opt/conda/share/sortmerna*/**/*.fa",
-        "/opt/conda/share/sortmerna*/**/*.fa.gz",
-        "/usr/local/share/sortmerna*/**/*.fasta",
-        "/usr/local/share/sortmerna*/**/*.fasta.gz",
-        "/usr/local/share/sortmerna*/**/*.fa",
-        "/usr/local/share/sortmerna*/**/*.fa.gz",
-        "/usr/share/sortmerna*/**/*.fasta",
-        "/usr/share/sortmerna*/**/*.fasta.gz",
-        "/usr/share/sortmerna*/**/*.fa",
-        "/usr/share/sortmerna*/**/*.fa.gz",
-    ]
-    paths = []
-    for pattern in patterns:
-        paths.extend(glob.glob(pattern, recursive=True))
-    return sorted(path for path in set(paths) if os.path.isfile(path))
-
-
-def concatenate_fastas(paths, output):
-    with open(output, "wb") as out_handle:
-        for path in paths:
-            opener = gzip.open if path.endswith(".gz") else open
-            with opener(path, "rb") as in_handle:
-                shutil.copyfileobj(in_handle, out_handle)
-                out_handle.write(b"\n")
-
-
-def extract_fastas(archive_path, output):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with tarfile.open(archive_path, "r:gz") as archive:
-            archive.extractall(tmpdir)
-        fastas = []
-        for root, _, files in os.walk(tmpdir):
-            for filename in files:
-                if filename.endswith(FASTA_EXTENSIONS):
-                    fastas.append(os.path.join(root, filename))
-        if not fastas:
-            raise RuntimeError("Downloaded SortMeRNA archive did not contain FASTA files")
-        concatenate_fastas(sorted(fastas), output)
-        return len(fastas)
-
-
-def find_named_fasta(root_dir, output_name):
-    matches = []
-    for root, _, files in os.walk(root_dir):
-        for filename in files:
-            if filename in (output_name, f"{output_name}.gz"):
-                matches.append(os.path.join(root, filename))
-    return sorted(matches)
 
 
 def copy_fasta(path, output):
@@ -85,32 +24,16 @@ def copy_fasta(path, output):
         shutil.copyfileobj(in_handle, out_handle)
 
 
-def find_keyword_fastas(root_dir, keyword):
-    matches = []
-    keyword = keyword.lower()
-    for root, _, files in os.walk(root_dir):
-        for filename in files:
-            lower_name = filename.lower()
-            if keyword in lower_name and lower_name.endswith(FASTA_EXTENSIONS):
-                matches.append(os.path.join(root, filename))
-    return sorted(matches)
+def output_name_for_archive_member(filename):
+    if filename.endswith(".gz"):
+        filename = filename[:-3]
+    return filename
 
 
-def extract_requested_database(archive_path, output, output_name):
+def extract_all_databases(archive_path, outdir):
     with tempfile.TemporaryDirectory() as tmpdir:
         with tarfile.open(archive_path, "r:gz") as archive:
             archive.extractall(tmpdir)
-
-        exact_matches = find_named_fasta(tmpdir, output_name)
-        if exact_matches:
-            copy_fasta(exact_matches[0], output)
-            return f"copied {output_name}"
-
-        if "fast" in output_name.lower():
-            fast_matches = find_keyword_fastas(tmpdir, "fast")
-            if fast_matches:
-                concatenate_fastas(fast_matches, output)
-                return f"extracted {len(fast_matches)} fast FASTA file(s)"
 
         fastas = []
         for root, _, files in os.walk(tmpdir):
@@ -120,57 +43,25 @@ def extract_requested_database(archive_path, output, output_name):
         if not fastas:
             raise RuntimeError("Downloaded SortMeRNA archive did not contain FASTA files")
 
-        concatenate_fastas(sorted(fastas), output)
-        return f"concatenated {len(fastas)} FASTA file(s)"
-
-
-def download_direct_fasta(output_name, output):
-    errors = []
-    for template in DIRECT_FASTA_URLS:
-        url = template.format(name=output_name)
-        print(f"Trying direct SortMeRNA FASTA download from {url}")
-        try:
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                tmp_path = tmp.name
-            try:
-                urllib.request.urlretrieve(url, tmp_path)
-                if os.path.getsize(tmp_path) < 100:
-                    with open(tmp_path, "rb") as handle:
-                        snippet = handle.read(100).decode("utf-8", errors="replace")
-                    raise RuntimeError(f"downloaded file is unexpectedly small: {snippet!r}")
-                shutil.move(tmp_path, output)
-                return url
-            finally:
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-        except Exception as exc:
-            errors.append(f"{url}: {exc}")
-    raise RuntimeError("Direct FASTA download failed. Attempts: " + " | ".join(errors))
+        extracted = []
+        for fasta in sorted(fastas):
+            out_name = output_name_for_archive_member(os.path.basename(fasta))
+            out_path = os.path.join(outdir, out_name)
+            copy_fasta(fasta, out_path)
+            extracted.append(out_path)
+        return extracted
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prepare a concatenated SortMeRNA reference FASTA.")
+    parser = argparse.ArgumentParser(description="Extract SortMeRNA database FASTAs.")
     parser.add_argument("--outdir", required=True, help="Directory for database output")
-    parser.add_argument("--output", required=True, help="Output FASTA path")
+    parser.add_argument("--output", required=True, help="Selected reference FASTA copy for the workflow")
+    parser.add_argument("--selected", required=True, help="Selected database FASTA basename to use")
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     output = args.output if os.path.isabs(args.output) else os.path.join(args.outdir, args.output)
-
-    if os.path.exists(output):
-        print(f"SortMeRNA reference already exists: {output}")
-        return
-
-    output_name = os.path.basename(output)
-    direct_errors = None
-    if output_name.startswith("smr_"):
-        try:
-            url = download_direct_fasta(output_name, output)
-            print(f"Downloaded {output_name} from {url}")
-            return
-        except Exception as exc:
-            direct_errors = str(exc)
-            print(f"Direct FASTA download unavailable for {output_name}: {exc}")
+    selected = os.path.basename(args.selected)
 
     errors = []
     for url in DATABASE_URLS:
@@ -178,23 +69,26 @@ def main():
             print(f"Downloading SortMeRNA database from {url}")
             try:
                 urllib.request.urlretrieve(url, tmp.name)
-                message = extract_requested_database(tmp.name, output, output_name)
-                print(f"Extracted SortMeRNA archive and {message} into {output}")
+                extracted = extract_all_databases(tmp.name, args.outdir)
+                by_name = {os.path.basename(path): path for path in extracted}
+                print("Extracted SortMeRNA database FASTAs:")
+                for name in sorted(by_name):
+                    print(f"  {name}")
+
+                if selected not in by_name:
+                    raise RuntimeError(
+                        f"Selected database {selected!r} was not found in the archive. "
+                        f"Available: {', '.join(sorted(by_name))}"
+                    )
+
+                shutil.copyfile(by_name[selected], output)
+                print(f"Selected {selected} for this workflow run as {output}")
                 return
             except Exception as exc:
                 errors.append(f"{url}: {exc}")
 
-    local_fastas = find_local_fastas()
-    if local_fastas:
-        concatenate_fastas(local_fastas, output)
-        print(f"Concatenated {len(local_fastas)} local SortMeRNA FASTA file(s) into {output}")
-        return
-
-    if direct_errors:
-        errors.insert(0, direct_errors)
-
     raise RuntimeError(
-        "Could not prepare SortMeRNA database from local files or release downloads. "
+        "Could not extract SortMeRNA databases from release downloads. "
         "Provide an existing reference with --sortmerna_ref. Attempts: " + " | ".join(errors)
     )
 
