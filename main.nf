@@ -402,7 +402,12 @@ workflow {
             .fromPath("${params.drep_genomes_dir}/*.{fa,fna,fasta}", checkIfExists: true)
             .collect()
 
-        bbmap_input_ch = SORTMERNA.out.rrna_removed.combine(genomes_ch)
+        bbmap_input_ch = SORTMERNA.out.rrna_removed
+            .combine(genomes_ch)
+            .map { values ->
+                def genome_files = values[4..-1]
+                tuple(values[0], values[1], values[2], values[3], genome_files)
+            }
         BBMAP_EXPRESSION(bbmap_input_ch)
     }
 }
