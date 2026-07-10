@@ -185,7 +185,6 @@ EOF
       --other index_probe_other \
       --fastx \
       --threads ${task.cpus} \
-      --paired_in \
       --out2 \
       --sout \
       > sortmerna_index.log 2>&1 || {
@@ -289,17 +288,24 @@ process SORTMERNA {
       --threads ${task.cpus} \
       --paired_in \
       --out2 \
-      --sout \
       > ${sample_id}.log 2>&1 || {
       cat ${sample_id}.log >&2
       exit 1
     }
 
-    for suffix in fwd rev; do
-      if [ -s "${sample_id}_rRNArm_\${suffix}.fq" ] && [ ! -s "${sample_id}_rRNArm_\${suffix}.fq.gz" ]; then
-        gzip "${sample_id}_rRNArm_\${suffix}.fq"
+    for fastq in *.fq; do
+      if [ -e "\${fastq}" ]; then
+        gzip "\${fastq}"
       fi
     done
+
+    if [ -s "${sample_id}_rRNArm_paired_fwd.fq.gz" ] && [ ! -s "${sample_id}_rRNArm_fwd.fq.gz" ]; then
+      mv ${sample_id}_rRNArm_paired_fwd.fq.gz ${sample_id}_rRNArm_fwd.fq.gz
+    fi
+
+    if [ -s "${sample_id}_rRNArm_paired_rev.fq.gz" ] && [ ! -s "${sample_id}_rRNArm_rev.fq.gz" ]; then
+      mv ${sample_id}_rRNArm_paired_rev.fq.gz ${sample_id}_rRNArm_rev.fq.gz
+    fi
 
     test -s ${sample_id}_rRNArm_fwd.fq.gz || {
       echo "Missing expected SortMeRNA output: ${sample_id}_rRNArm_fwd.fq.gz" >&2
