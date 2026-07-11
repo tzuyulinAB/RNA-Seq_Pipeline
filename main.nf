@@ -335,31 +335,92 @@ process BBMAP_EXPRESSION {
 
     output:
     path "${sample_id}/.done", emit: done
-    path "${sample_id}/**", emit: expression
+    path "${sample_id}/*/scafstats.tsv", emit: scafstats
+    path "${sample_id}/*/covstats.tsv", emit: covstats
+    tuple val(sample_id), path("${sample_id}/${sample_id}_assignedReads.tsv"), emit: assigned_reads
     path "${sample_id}.log", emit: log
 
     script:
+    def sample_prefix = sample_id.toString().tokenize('_')[0]
     """
     mkdir -p ${sample_id}
+    printf "Sample\\tORF_id\\tassignedReads\\n" > ${sample_id}/${sample_id}_assignedReads.tsv
+    sample_prefix="${sample_prefix}"
 
     for genome in ${genomes}; do
       name=\$(basename "\${genome}")
       name="\${name%.*}"
-      mkdir -p ${sample_id}/"\${name}"
+      if [[ "\${name}" == "\${sample_prefix}_"* ]]; then
+        out_name="${sample_id}_\${name#\${sample_prefix}_}"
+      else
+        out_name="${sample_id}_\${name}"
+      fi
+      mkdir -p ${sample_id}/"\${out_name}"
       bbmap.sh threads=${task.cpus} nodisk=t ref="\${genome}" \
         in=${fwd} in2=${rev} \
-        scafstats=${sample_id}/"\${name}"/scafstats.tsv \
-        covstats=${sample_id}/"\${name}"/covstats.tsv
-    done > ${sample_id}.log 2>&1
+        scafstats=${sample_id}/"\${out_name}"/scafstats.tsv \
+        covstats=${sample_id}/"\${out_name}"/covstats.tsv
+
+      awk 'BEGIN{FS=OFS="\\t"} NR==1{print; next} {sub(/[[:space:]]*#.*/, "", \$1); print}' \
+        ${sample_id}/"\${out_name}"/scafstats.tsv > ${sample_id}/"\${out_name}"/scafstats.clean.tsv
+      mv ${sample_id}/"\${out_name}"/scafstats.clean.tsv ${sample_id}/"\${out_name}"/scafstats.tsv
+
+      awk -v sample="${sample_id}" 'BEGIN{FS=OFS="\\t"} NR==1{for(i=1;i<=NF;i++) if(\$i=="assignedReads") assigned=i; next} assigned && \$1 !~ /^#/ {print sample, \$1, \$assigned}' \
+        ${sample_id}/"\${out_name}"/scafstats.tsv >> ${sample_id}/${sample_id}_assignedReads.tsv
+    done > ${sample_id}.log 2>&1 || {
+      cat ${sample_id}.log >&2
+      exit 1
+    }
 
     touch ${sample_id}/.done
+    """
+}
+
+process MERGE_ASSIGNED_READS {
+    tag 'assigned_reads'
+    label 'python'
+
+    publishDir "${params.outdir}/expression", mode: 'copy', overwrite: true, pattern: 'assignedReads_feature_table.tsv'
+
+    input:
+    path assigned_tables
+
+    output:
+    path 'assignedReads_feature_table.tsv', emit: table
+
+    script:
+    """
+    python3 "${projectDir}/bin/merge_assigned_reads.py" \
+      --output assignedReads_feature_table.tsv \
+      ${assigned_tables}
+    """
+}
+
+process BUILD_GENE_LENGTH_TABLE {
+    tag 'gene_lengths'
+    label 'python'
+
+    publishDir "${params.outdir}/reference", mode: 'copy', overwrite: true, pattern: 'gene_lengths.tsv'
+
+    input:
+    path genomes
+
+    output:
+    path 'gene_lengths.tsv', emit: table
+
+    script:
+    """
+    python3 "${projectDir}/bin/build_gene_length_table.py" \
+      --output gene_lengths.tsv \
+      ${genomes}
     """
 }
 
 workflow {
     samplesheet_ch = existingPathChannel(params.samples)
     VALIDATE_CONFIG(samplesheet_ch)
-    CHECK_DEPENDENCIES(params.drep_genomes_dir ? true : false)
+    ref_dir = params.ref_dir ?: params.drep_genomes_dir
+    CHECK_DEPENDENCIES(ref_dir ? true : false)
 
     sample_rows = readSamples(params.samples)
     samples_ch = Channel
@@ -397,9 +458,9 @@ workflow {
     sortmerna_input_ch = TRIM_RNA.out.trimmed.combine(sortmerna_ref_ch).combine(sortmerna_index_ch)
     SORTMERNA(sortmerna_input_ch)
 
-    if (params.drep_genomes_dir) {
+    if (ref_dir) {
         genomes_ch = Channel
-            .fromPath("${params.drep_genomes_dir}/*.{fa,fna,fasta}", checkIfExists: true)
+            .fromPath("${ref_dir}/*.{fa,fna,fasta}", checkIfExists: true)
             .collect()
 
         bbmap_input_ch = SORTMERNA.out.rrna_removed
@@ -409,5 +470,11 @@ workflow {
                 tuple(values[0], values[1], values[2], values[3], genome_files)
             }
         BBMAP_EXPRESSION(bbmap_input_ch)
+        BUILD_GENE_LENGTH_TABLE(genomes_ch)
+
+        assigned_tables_ch = BBMAP_EXPRESSION.out.assigned_reads
+            .map { sample_id, table -> table }
+            .collect()
+        MERGE_ASSIGNED_READS(assigned_tables_ch)
     }
 }

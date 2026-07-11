@@ -41,7 +41,7 @@ Include optional BBMap expression mapping against dereplicated genomes:
 
 ```bash
 nextflow run main.nf -profile docker \
-  --drep_genomes_dir /path/to/metagenomics/results/mags/drep/dereplicated_genomes
+  --ref_dir /path/to/metagenomics/results/mags/drep/dereplicated_genomes
 ```
 
 Use existing resource files instead of preparing/downloading them:
@@ -79,7 +79,7 @@ nextflow run main.nf -profile docker \
 | `--adapter_fasta` | `null` | Existing adapter FASTA to use directly. |
 | `--sortmerna_ref` | `resources/sortmerna/smr_v4.3_default_db.fasta` | Existing or target SortMeRNA reference FASTA. |
 | `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow reuses `resources/sortmerna/index/sortmerna_index` when present, otherwise builds one once. |
-| `--drep_genomes_dir` | empty | Optional directory containing dereplicated MAG `.fa`, `.fna`, or `.fasta` files for BBMap. |
+| `--ref_dir` | empty | Optional directory containing reference `.fa`, `.fna`, or `.fasta` files for BBMap expression mapping. |
 
 ## Outputs
 
@@ -92,6 +92,8 @@ nextflow run main.nf -profile docker \
 | FastQC | `results/rna/fastqc_trimmed/*_fastqc.html` |
 | rRNA removal | `results/rna/sortmerna/*_rRNArm_fwd.fq.gz`, `results/rna/sortmerna/*_rRNArm_rev.fq.gz` |
 | BBMap expression | `results/expression/bbmap/<sample>/<genome>/scafstats.tsv`, `covstats.tsv` |
+| Assigned read table | `results/expression/assignedReads_feature_table.tsv` |
+| Gene length table | `results/reference/gene_lengths.tsv` |
 
 ## Platform Note
 
