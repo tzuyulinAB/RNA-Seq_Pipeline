@@ -150,14 +150,14 @@ process PREPARE_SORTMERNA_INDEX {
     label 'sortmerna'
     cpus { params.threads.sortmerna as int }
 
-    publishDir "${params.sortmerna_dir}/index", mode: 'copy', overwrite: true, pattern: 'sortmerna_index/**'
+    publishDir params.sortmerna_dir, mode: 'copy', overwrite: true, pattern: 'index/**'
     publishDir 'logs/resources', mode: 'copy', overwrite: true, pattern: 'sortmerna_index.log'
 
     input:
     path ref
 
     output:
-    path 'sortmerna_index', emit: index
+    path 'index', emit: index
     path 'sortmerna_index.log', emit: log
 
     script:
@@ -177,7 +177,7 @@ IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 EOF
 
     sortmerna \
-      --workdir sortmerna_index \
+      --workdir index \
       --ref ${ref} \
       --reads index_probe_R1.fq \
       --reads index_probe_R2.fq \
@@ -192,9 +192,9 @@ EOF
       exit 1
     }
 
-    test -d sortmerna_index/idx
-    rm -rf sortmerna_index/kvdb sortmerna_index/readb
-    mkdir -p sortmerna_index/kvdb sortmerna_index/readb
+    test -d index/idx
+    rm -rf index/kvdb index/readb
+    mkdir -p index/kvdb index/readb
     """
 }
 
@@ -443,6 +443,8 @@ workflow {
 
     if (params.sortmerna_index_dir) {
         sortmerna_index_ch = existingPathChannel(params.sortmerna_index_dir)
+    } else if (file("${params.sortmerna_dir}/index/idx").exists()) {
+        sortmerna_index_ch = existingPathChannel("${params.sortmerna_dir}/index")
     } else if (file("${params.sortmerna_dir}/index/sortmerna_index/idx").exists()) {
         sortmerna_index_ch = existingPathChannel("${params.sortmerna_dir}/index/sortmerna_index")
     } else {

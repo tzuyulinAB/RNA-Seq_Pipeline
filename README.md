@@ -78,7 +78,7 @@ nextflow run main.nf -profile docker \
 | `--adapter_selected` | `NexteraPE-PE.fa` | Trimmomatic adapter file to prepare. |
 | `--adapter_fasta` | `null` | Existing adapter FASTA to use directly. |
 | `--sortmerna_ref` | `resources/sortmerna/smr_v4.3_default_db.fasta` | Existing or target SortMeRNA reference FASTA. |
-| `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow reuses `resources/sortmerna/index/sortmerna_index` when present, otherwise builds one once. |
+| `--sortmerna_index_dir` | `null` | Existing SortMeRNA work/index directory to reuse. If omitted, the workflow reuses `resources/sortmerna/index` when present, otherwise builds one once. |
 | `--ref_dir` | empty | Optional directory containing reference `.fa`, `.fna`, or `.fasta` files for BBMap expression mapping. |
 
 ## Outputs
@@ -87,7 +87,7 @@ nextflow run main.nf -profile docker \
 | --- | --- |
 | Validation | `config/validation.ok`, `logs/config/validate_config.log` |
 | Dependency check | `reports/dependency_check.tsv`, `logs/config/check_dependencies.log` |
-| SortMeRNA index | `resources/sortmerna/index/sortmerna_index`, `logs/resources/sortmerna_index.log` |
+| SortMeRNA index | `resources/sortmerna/index`, `logs/resources/sortmerna_index.log` |
 | Trimming | `results/rna/trim/*_paired.fq.gz`, `results/rna/trim/*_unpaired.fq.gz` |
 | FastQC | `results/rna/fastqc_trimmed/*_fastqc.html` |
 | rRNA removal | `results/rna/sortmerna/*_rRNArm_fwd.fq.gz`, `results/rna/sortmerna/*_rRNArm_rev.fq.gz` |
