@@ -10,7 +10,7 @@
 6. Trim paired-end RNA reads with Trimmomatic.
 7. Run FastQC on paired trimmed reads.
 8. Remove rRNA reads with SortMeRNA.
-9. Optionally map rRNA-removed reads to dereplicated MAGs with BBMap.
+9. Optionally map rRNA-removed reads to reference genomes or annotated genomes with BBMap.
 
 ## Inputs
 
@@ -18,7 +18,7 @@ Edit `config/samples.tsv`:
 
 ```tsv
 sample_id	condition	read1	read2
-CAAI_1	AD	raw_data/sample_R1.fastq.gz	raw_data/sample_R2.fastq.gz
+sample01	Ctrl	raw_data/sample01_R1.fastq.gz	raw_data/sample01_R2.fastq.gz
 ```
 
 Relative FASTQ paths are resolved from the directory where you launch Nextflow.
@@ -37,11 +37,11 @@ Run with Docker:
 nextflow run main.nf -profile docker
 ```
 
-Include optional BBMap expression mapping against dereplicated genomes:
+Include optional BBMap expression mapping against reference genomes:
 
 ```bash
 nextflow run main.nf -profile docker \
-  --ref_dir /path/to/metagenomics/results/mags/drep/dereplicated_genomes
+  --ref_dir /path/to/reference_genomes
 ```
 
 Use existing resource files instead of preparing/downloading them:
